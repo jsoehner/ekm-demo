@@ -1,0 +1,27 @@
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: start-dev
+    environment:
+      KC_DB: dev-file
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports: ["8080:8080"]
+  
+  vault:
+    image: hashicorp/vault:latest
+    entrypoint: ["vault", "server", "-config=/vault/config/vault.hcl"]
+    cap_add: ["IPC_LOCK"]
+    ports: ["8250:8200"] 
+    volumes:
+      - ./config:/vault/config
+      - ./certs:/vault/certs
+
+  ekm-proxy:
+    image: python:3.9-slim
+    command: sh -c "pip install flask requests pyjwt cryptography && python /app/proxy.py"
+    volumes:
+      - ./app:/app
+      - ./certs:/certs
+    ports: ["5050:5000"]

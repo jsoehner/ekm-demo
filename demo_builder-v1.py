@@ -116,20 +116,51 @@ services:
     with open("docker-compose.yml", "w") as f:
         f.write(docker_compose)
 
+    # VERSION 1.0: Proxy now validates Layer-7 Identity via JWT before attempting Layer-4 Decryption
     proxy_app = """
 from flask import Flask, request, jsonify
 import requests
 import urllib3
+import jwt
+from jwt import PyJWKClient
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = Flask(__name__)
 
+# Keycloak JWKS Endpoint (Public Keys for Signature Validation)
+JWKS_URL = "http://keycloak:8080/realms/ekm-demo/protocol/openid-connect/certs"
+jwks_client = PyJWKClient(JWKS_URL)
+
+def verify_identity_token(token):
+    try:
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        data = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False} # Simplified for demo purposes
+        )
+        return True, data
+    except Exception as e:
+        return False, str(e)
+
 @app.route('/unwrap-key', methods=['POST'])
 def unwrap_dek():
     try:
+        # --- LAYER 7: IDENTITY VALIDATION ---
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"error": "Missing or Invalid Bearer Token. Identity required."}), 401
+            
+        token = auth_header.split(' ')[1]
+        is_valid, token_data = verify_identity_token(token)
+        
+        if not is_valid:
+            return jsonify({"error": f"Cryptographic Identity Validation Failed: {token_data}"}), 403
+            
+        # --- LAYER 4: CRYPTOGRAPHIC TRANSLATION ---
         encrypted_dek = request.json.get('ciphertext')
         
-        # 1. Login to Vault via mTLS to get an application token
         auth_res = requests.post(
             "https://vault:8200/v1/auth/cert/login", 
             cert=('/certs/proxy.crt', '/certs/proxy.key'), 
@@ -142,7 +173,6 @@ def unwrap_dek():
             
         client_token = auth_res.json()['auth']['client_token']
         
-        # 2. Ask Vault to decrypt the payload. 
         unwrap_res = requests.post(
             "https://vault:8200/v1/transit/decrypt/my-master-kek", 
             headers={"X-Vault-Token": client_token}, 
@@ -180,98 +210,114 @@ def start_infrastructure():
     except subprocess.CalledProcessError as e:
         print_diagnostic_trace(error_msg="Docker Compose failed to start the containers.")
 
-# --- 5. Smart Polling for Vault ---
-def wait_for_vault():
+# --- 5. Smart Polling ---
+def wait_for_services():
+    print(f"\n{C.HEADER}{C.BOLD}=== PHASE 4: INFRASTRUCTURE READINESS ==={C.END}")
+    
+    # 1. Vault Polling
     print(f"{C.CYAN}[*] Polling Vault API for readiness via mTLS...{C.END}")
     tls_args = {"verify": False, "cert": ('certs/proxy.crt', 'certs/proxy.key')}
-    
+    vault_ready = False
     for _ in range(30):
         try:
             requests.get("https://127.0.0.1:8250/v1/sys/health", timeout=2, **tls_args)
             print(f"{C.GREEN}[+] Vault is online and accepting mTLS connections.{C.END}")
-            print(f"{C.CYAN}[*] Waiting 5s for Proxy Python dependencies to finish installing...{C.END}")
-            time.sleep(5) 
-            return
+            vault_ready = True
+            break
         except requests.exceptions.ConnectionError:
             time.sleep(1)
-    
-    print_diagnostic_trace(service_name="vault", error_msg="Connection Refused: Vault API never became responsive.")
+    if not vault_ready:
+        print_diagnostic_trace(service_name="vault", error_msg="Vault API never became responsive.")
 
-# --- 6. Vault Automated Configuration ---
-def configure_vault():
-    print(f"\n{C.HEADER}{C.BOLD}=== PHASE 4: VAULT EKM CONFIGURATION ==={C.END}")
+    # 2. Keycloak Polling (Takes longer to boot)
+    print(f"{C.CYAN}[*] Polling Keycloak Identity Provider for readiness...{C.END}")
+    keycloak_ready = False
+    for _ in range(60):
+        try:
+            res = requests.get("http://127.0.0.1:8080/realms/master", timeout=2)
+            if res.status_code == 200:
+                print(f"{C.GREEN}[+] Keycloak is online.{C.END}")
+                keycloak_ready = True
+                break
+        except requests.exceptions.ConnectionError:
+            time.sleep(2)
+    if not keycloak_ready:
+        print_diagnostic_trace(service_name="keycloak", error_msg="Keycloak never became responsive.")
+
+    print(f"{C.CYAN}[*] Waiting 5s for Proxy Python dependencies to finish installing...{C.END}")
+    time.sleep(5)
+
+# --- 6. Identity & Cryptography Configuration ---
+def configure_environment():
+    print(f"\n{C.HEADER}{C.BOLD}=== PHASE 5: OIDC & EKM CONFIGURATION ==={C.END}")
+    
+    # --- KEYCLOAK (OIDC) CONFIGURATION ---
+    print(f"{C.CYAN}[*] Configuring Keycloak (Simulating Microsoft Entra ID)...{C.END}")
+    try:
+        # Get Admin Token
+        token_res = requests.post(
+            "http://127.0.0.1:8080/realms/master/protocol/openid-connect/token",
+            data={"client_id": "admin-cli", "username": "admin", "password": "admin", "grant_type": "password"}
+        )
+        kc_token = token_res.json()["access_token"]
+        kc_headers = {"Authorization": f"Bearer {kc_token}", "Content-Type": "application/json"}
+
+        # Create Realm
+        requests.post("http://127.0.0.1:8080/admin/realms", headers=kc_headers, json={"realm": "ekm-demo", "enabled": True})
+        
+        # Create Service Principal Client (Azure Workload)
+        client_payload = {
+            "clientId": "azure-workload",
+            "enabled": True,
+            "serviceAccountsEnabled": True, # Client Credentials Grant
+            "publicClient": False,
+            "secret": "demo-client-secret-123"
+        }
+        requests.post("http://127.0.0.1:8080/admin/realms/ekm-demo/clients", headers=kc_headers, json=client_payload)
+        print(f"{C.GREEN}[+] Identity Provider Configured: Realm 'ekm-demo' and Client 'azure-workload' created.{C.END}")
+    except Exception as e:
+        print_diagnostic_trace(service_name="keycloak", error_msg=f"Keycloak Config Failed: {e}")
+
+    # --- VAULT (EKM) CONFIGURATION ---
+    print(f"{C.CYAN}[*] Configuring Vault (Hardware Security Module Mock)...{C.END}")
     vault_url = "https://127.0.0.1:8250"
     tls_args = {"verify": False, "cert": ('certs/proxy.crt', 'certs/proxy.key')}
 
     try:
-        print(f"{C.CYAN}[*] Initializing and Unsealing Vault...{C.END}")
         init_res = requests.put(f"{vault_url}/v1/sys/init", json={"secret_shares": 1, "secret_threshold": 1}, **tls_args)
-        if init_res.status_code != 200:
-            print(f"{C.YELLOW}[!] Vault is already initialized.{C.END}")
-            return
-        
-        keys = init_res.json()
-        root_token = keys["root_token"]
-        unseal_key = keys["keys"][0]
+        if init_res.status_code == 200:
+            keys = init_res.json()
+            requests.put(f"{vault_url}/v1/sys/unseal", json={"key": keys["keys"][0]}, **tls_args)
+            headers = {"X-Vault-Token": keys["root_token"]}
 
-        requests.put(f"{vault_url}/v1/sys/unseal", json={"key": unseal_key}, **tls_args)
-        headers = {"X-Vault-Token": root_token}
+            requests.post(f"{vault_url}/v1/sys/auth/cert", headers=headers, json={"type": "cert"}, **tls_args)
+            
+            policy = 'path "transit/encrypt/my-master-kek" { capabilities = ["update"] }\npath "transit/decrypt/my-master-kek" { capabilities = ["update"] }'
+            requests.put(f"{vault_url}/v1/sys/policies/acl/ekm-proxy-policy", headers=headers, json={"policy": policy}, **tls_args)
 
-        print(f"{C.CYAN}[*] Mapping Proxy mTLS Certificate to Vault Access Policy...{C.END}")
-        requests.post(f"{vault_url}/v1/sys/auth/cert", headers=headers, json={"type": "cert"}, **tls_args)
+            with open("certs/proxy.crt", "r") as f: proxy_cert = f.read()
+            requests.post(f"{vault_url}/v1/auth/cert/certs/ekm-proxy", headers=headers, json={"certificate": proxy_cert, "policies": "ekm-proxy-policy", "name": "ekm-proxy"}, **tls_args)
 
-        policy = """
-        path "transit/encrypt/my-master-kek" { capabilities = ["update"] }
-        path "transit/decrypt/my-master-kek" { capabilities = ["update"] }
-        """
-        requests.put(f"{vault_url}/v1/sys/policies/acl/ekm-proxy-policy", headers=headers, json={"policy": policy}, **tls_args)
-
-        with open("certs/proxy.crt", "r") as f:
-            proxy_cert = f.read()
-        
-        cert_payload = {"certificate": proxy_cert, "policies": "ekm-proxy-policy", "name": "ekm-proxy"}
-        requests.post(f"{vault_url}/v1/auth/cert/certs/ekm-proxy", headers=headers, json=cert_payload, **tls_args)
-
-        print(f"{C.CYAN}[*] Enabling Transit Engine and Generating the Key Encryption Key (KEK)...{C.END}")
-        requests.post(f"{vault_url}/v1/sys/mounts/transit", headers=headers, json={"type": "transit"}, **tls_args)
-        requests.post(f"{vault_url}/v1/transit/keys/my-master-kek", headers=headers, **tls_args)
-        
-        kek_info = requests.get(f"{vault_url}/v1/transit/keys/my-master-kek", headers=headers, **tls_args).json()
-        print(f"{C.GREEN}[+] KEK Created Successfully. Vault holds this key tightly in memory.{C.END}")
-        print(f"{C.YELLOW}    KEK Name: {kek_info['data']['name']}{C.END}")
-        print(f"{C.YELLOW}    KEK Type: {kek_info['data']['type']} (Exportable: {kek_info['data']['exportable']}){C.END}")
-
+            requests.post(f"{vault_url}/v1/sys/mounts/transit", headers=headers, json={"type": "transit"}, **tls_args)
+            requests.post(f"{vault_url}/v1/transit/keys/my-master-kek", headers=headers, **tls_args)
+            
+            kek_info = requests.get(f"{vault_url}/v1/transit/keys/my-master-kek", headers=headers, **tls_args).json()
+            print(f"{C.GREEN}[+] KEK Created Successfully. Vault holds this key tightly in memory.{C.END}")
+            print(f"{C.YELLOW}    KEK Name: {kek_info['data']['name']}{C.END}")
     except Exception as e:
-        print_diagnostic_trace(service_name="vault", error_msg=f"Vault API Configuration Failed: {e}")
+        print_diagnostic_trace(service_name="vault", error_msg=f"Vault Config Failed: {e}")
 
 # --- 7. End-to-End Test Execution ---
 def run_decryption_test():
-    print(f"\n{C.HEADER}{C.BOLD}=== PHASE 5: END-TO-END EKM DECRYPTION TEST ==={C.END}")
+    print(f"\n{C.HEADER}{C.BOLD}=== PHASE 6: END-TO-END EKM DECRYPTION TEST (v1.0) ==={C.END}")
     tls_args = {"verify": False, "cert": ('certs/proxy.crt', 'certs/proxy.key')}
     
-    # STEP 1: mTLS Authentication
-    print(f"{C.CYAN}-> 1. Establishing Zero-Trust Authenticated Session...{C.END}")
-    print(f"      {C.BLUE}WHY:{C.END} Before sending any HTTP payload, the proxy establishes a secure TLS tunnel.")
-    print(f"           Vault requires the proxy to present its x509 Client Certificate. Without this,")
-    print(f"           the TCP connection is instantly dropped. Once verified, Vault issues an API token.")
-    
+    # 1. Generate Fake Storage Data
+    print(f"{C.CYAN}-> 1. Simulating Storage: Wrapping the Application Data Key...{C.END}")
     auth_res = requests.post("https://127.0.0.1:8250/v1/auth/cert/login", **tls_args)
     client_token = auth_res.json()['auth']['client_token']
-    print(f"      {C.GREEN}[+] Success: Proxy authenticated via mTLS and received Vault token.{C.END}\n")
     
-    # STEP 2: Data Generation
-    print(f"{C.CYAN}-> 2. Simulating Application Data Generation...{C.END}")
-    print(f"      {C.BLUE}WHAT:{C.END} A vendor application creates a Data Encryption Key (DEK). This is the")
-    print(f"            symmetric key that actually locks and unlocks the underlying business data.")
     plaintext_dek_bytes = b"super-secret-vendor-data-key-12345"
-    print(f"      {C.GREEN}[Plaintext DEK]: {plaintext_dek_bytes.decode('utf-8')}{C.END}\n")
-    
-    # STEP 3: Encryption (Wrapping)
-    print(f"{C.CYAN}-> 3. Simulating Cloud Storage: Wrapping the DEK...{C.END}")
-    print(f"      {C.BLUE}WHY:{C.END} We cannot store the plaintext DEK in the cloud. Instead, we ask our External")
-    print(f"           Key Manager (Vault) to 'wrap' (encrypt) this DEK using our master KEK.")
-    print(f"           The resulting Ciphertext is what actually gets saved in Azure Storage.")
-    
     plaintext_dek_b64 = base64.b64encode(plaintext_dek_bytes).decode('utf-8')
     encrypt_res = requests.post(
         "https://127.0.0.1:8250/v1/transit/encrypt/my-master-kek",
@@ -281,17 +327,30 @@ def run_decryption_test():
     )
     encrypted_dek = encrypt_res.json()['data']['ciphertext']
     print(f"      {C.RED}[Encrypted DEK (Ciphertext)]: {encrypted_dek}{C.END}\n")
+
+    # 2. Acquire Identity Token (The Entra ID Service Principal Simulation)
+    print(f"{C.CYAN}-> 2. Acquiring Identity Token from Identity Provider (Keycloak)...{C.END}")
+    print(f"      {C.BLUE}WHY:{C.END} The Azure Workload must prove *who* it is before requesting decryption.")
+    print(f"           It uses a Client Credentials grant to obtain a JWT.")
+    token_payload = {
+        "client_id": "azure-workload",
+        "client_secret": "demo-client-secret-123",
+        "grant_type": "client_credentials"
+    }
+    oidc_res = requests.post("http://127.0.0.1:8080/realms/ekm-demo/protocol/openid-connect/token", data=token_payload)
+    workload_jwt = oidc_res.json()["access_token"]
+    print(f"      {C.YELLOW}[JWT Acquired]: {workload_jwt[:40]}... (truncated){C.END}\n")
     
-    # STEP 4: Decryption via Proxy
-    print(f"{C.CYAN}-> 4. Azure Workload Requesting Decryption from the external EKM Proxy...{C.END}")
-    print(f"      {C.BLUE}WHY:{C.END} A vendor now needs the data. The Azure workload retrieves the RED Ciphertext")
-    print(f"           from storage. Because Azure does NOT possess the master KEK, it sends the")
-    print(f"           Ciphertext to our Python Proxy. The Proxy securely passes it to Vault.")
-    print(f"           Vault unwraps it, and the Proxy securely returns the GREEN Plaintext DEK to Azure.")
+    # 3. Request Decryption
+    print(f"{C.CYAN}-> 3. Requesting Decryption from the EKM Proxy via API Gateway...{C.END}")
+    print(f"      {C.BLUE}WHY:{C.END} The Proxy receives the encrypted data AND the JWT. It validates the JWT")
+    print(f"           cryptographically against Keycloak. Only if the identity is valid will it")
+    print(f"           use its mTLS certificate to ask Vault to decrypt the payload.")
     
     try:
         proxy_res = requests.post(
             "http://127.0.0.1:5050/unwrap-key",
+            headers={"Authorization": f"Bearer {workload_jwt}"}, # Supplying the Identity Badge
             json={"ciphertext": encrypted_dek},
             timeout=10
         )
@@ -299,7 +358,7 @@ def run_decryption_test():
         if proxy_res.status_code == 200:
             decrypted_base64 = proxy_res.json()['plaintext_dek']
             decrypted_raw = base64.b64decode(decrypted_base64).decode('utf-8')
-            print(f"      {C.GREEN}[+] SUCCESS! Proxy forwarded the cipher, Vault unwrapped it securely.{C.END}")
+            print(f"      {C.GREEN}[+] SUCCESS! Proxy validated OIDC token, forwarded cipher, and unwrapped the key.{C.END}")
             print(f"      {C.GREEN}[Recovered Plaintext DEK]: {decrypted_raw}{C.END}")
         else:
             print(f"      {C.RED}[!] Decryption Failed: {proxy_res.text}{C.END}")
@@ -310,10 +369,10 @@ def run_decryption_test():
     print(f"\n{C.HEADER}{C.BOLD}========================================================{C.END}\n")
 
 if __name__ == "__main__":
-    print(f"{C.BOLD}--- Starting EKM Architecture Deployment (v0.9.3) ---{C.END}")
+    print(f"{C.BOLD}--- Starting EKM Architecture Deployment (v1.0) ---{C.END}")
     generate_mtls_certs()
     write_configs()
     start_infrastructure()
-    wait_for_vault()
-    configure_vault()
+    wait_for_services()
+    configure_environment()
     run_decryption_test()

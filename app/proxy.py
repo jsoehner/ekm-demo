@@ -216,8 +216,8 @@ def decrypt_dek(client_token: str, ciphertext: str) -> Tuple[bool, Optional[str]
             return False, None, decrypt_response.text
             
     except Exception as e:
-        logger.error(f"Exception during DEK decryption: {e}")
-        return False, None, str(e)
+        logger.exception("Exception during DEK decryption")
+        return False, None, "Internal decryption error"
 
 
 @app.route('/unwrap-key', methods=['POST'])
@@ -304,14 +304,14 @@ def unwrap_dek():
         if decrypt_error:
             logger.error(f"RESPONSE - DEK decryption error: {decrypt_error}")
             
-        return jsonify({"error": f"Vault Decryption Failed: {decrypt_error}"}), 500
+        return jsonify({"error": "Vault Decryption Failed."}), 500
         
     except Exception as e:
         # Catch-all for unexpected exceptions
         logger.exception("UNEXPECTED INTERNAL EXCEPTION")
         logger.error(f"Exception occurred: {type(e).__name__}: {e}")
         
-        return jsonify({"error": f"Proxy Internal Exception: {str(e)}"}), 500
+        return jsonify({"error": "Proxy Internal Exception."}), 500
 
 
 @app.route('/health', methods=['GET'])

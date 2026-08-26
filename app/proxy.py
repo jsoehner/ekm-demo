@@ -302,7 +302,10 @@ def unwrap_dek():
         
         # === ERROR HANDLING ===
         if decrypt_error:
-            logger.error(f"RESPONSE - DEK decryption error: {decrypt_error}")
+logger.error(
+    "RESPONSE - DEK decryption error: %s",
+    str(decrypt_error).replace("\r", "\\r").replace("\n", "\\n")[:1024],
+)
             
         return jsonify({"error": "Vault Decryption Failed."}), 500
         

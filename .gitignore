@@ -19,3 +19,4 @@ bandit-report.json
 sbom.json
 audit-report.md
 *.log
+.env

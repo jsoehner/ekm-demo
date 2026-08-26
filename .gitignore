@@ -1,3 +1,21 @@
-app/
+# Local dependencies and venv
+venv/
+__pycache__/
+app/__pycache__/
+.DS_Store
+.continue/
+
+# Cryptographic Keys, Certificates, and Secrets
 certs/
-config/
+*.key
+*.pem
+*.crt
+*.csr
+*.srl
+*.pfx
+
+# Local scans and temporary logs
+bandit-report.json
+sbom.json
+audit-report.md
+*.log

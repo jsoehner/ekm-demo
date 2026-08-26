@@ -5,8 +5,8 @@ services:
     command: start-dev
     environment:
       KC_DB: dev-file
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     ports: ["8080:8080"]
   
   vault:
@@ -20,7 +20,7 @@ services:
 
   ekm-proxy:
     image: python:3.9-slim
-    command: sh -c "pip install flask requests pyjwt cryptography && python /app/proxy.py"
+    command: sh -c "pip install flask requests pyjwt cryptography gunicorn && gunicorn -b 0.0.0.0:5000 --chdir /app proxy:app"
     volumes:
       - ./app:/app
       - ./certs:/certs

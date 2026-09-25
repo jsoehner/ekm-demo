@@ -20,3 +20,6 @@ sbom.json
 audit-report.md
 *.log
 .env
+
+# Generated BOM artifacts
+oss/

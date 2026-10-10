@@ -207,3 +207,7 @@ Contributions are welcome! Please follow these steps:
 ## License
 
 Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
+
+
+## 🛡️ Security & Cryptographic Posture
+This project tracks Software & Cryptographic Bill of Materials (SBOM & CBOM) and Post-Quantum Cryptography (PQC) readiness. See the latest [Cryptographic Audit & PQC Migration Report](docs/security/CRYPTOGRAPHIC_AUDIT.md).

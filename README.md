@@ -190,6 +190,46 @@ This repository includes security audit results and compliance reports:
 - [Hardening & Remediation Report](security_hardening_report.md)
 - [SAST Security Report](sast_security_report.md)
 - [Software Bill of Materials (SBOM)](sbom.json)
+- [Cryptographic Audit & PQC Migration Report](docs/security/CRYPTOGRAPHIC_AUDIT.md)
+
+---
+
+## Automated SBOM & CBOM Supply Chain Pipeline
+
+This repository incorporates automated Software Bill of Materials (SBOM) and Cryptographic Bill of Materials (CBOM) generation, semantic AST analysis, and verification harnesses to enforce software supply chain integrity and cryptographic governance.
+
+For architectural decisions and trade-offs, refer to [ADR 0002: Automated SBOM and CBOM Supply Chain Governance](docs/adr/0002-automated-sbom-cbom-supply-chain-governance.md).
+
+### Pipeline Stages (.github/workflows/sbom-cbom.yml)
+
+The continuous integration pipeline automates:
+1. **Dual-Format SBOM Generation**: Employs Anchore/Syft (`anchore/sbom-action`) to produce CycloneDX JSON (`oss/sbom.cyclonedx.json`) and SPDX JSON (`oss/sbom.spdx.json`).
+2. **CBOM Discovery**: Leverages `cbomkit-action` to extract cryptographic algorithms, key lengths, and cryptographic dependencies into `oss/cbom.json`.
+3. **Semantic AST Cryptographic Scanning**: Executes `scripts/scan_crypto_ast.py` to identify cryptographic usage call sites and reconcile them against the CBOM catalog.
+4. **Verification & Audit Harness**: Runs `scripts/test_boms.sh` to validate schema conformance and verify component inventories.
+5. **Post-Quantum Cryptography (PQC) Readiness Assessment**: Executes `scripts/analyze_cbom.py` to evaluate classical vs. quantum-safe cryptographic algorithms and generates Step Summaries alongside `docs/security/CRYPTOGRAPHIC_AUDIT.md`.
+6. **Artifact Archival**: Publishes all generated bills and audit logs as workflow artifacts with 90-day retention.
+
+### Local Script Usage
+
+You can generate and test BOMs locally using provided utility scripts:
+
+- **Generate Bills of Materials**:
+  ```bash
+  bash scripts/generate_boms.sh
+  ```
+- **AST Cryptographic Scanning**:
+  ```bash
+  python3 scripts/scan_crypto_ast.py . --cbom oss/cbom.json --output-json oss/crypto-callsites.json
+  ```
+- **Verify BOM Schema & Quality Gates**:
+  ```bash
+  bash scripts/test_boms.sh oss
+  ```
+- **PQC Cryptographic Analysis & Reporting**:
+  ```bash
+  python3 scripts/analyze_cbom.py oss/cbom.json --sbom oss/sbom.cyclonedx.json --markdown oss/crypto-summary.md
+  ```
 
 ---
 

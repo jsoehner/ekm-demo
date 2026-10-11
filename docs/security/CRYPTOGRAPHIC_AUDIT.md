@@ -1,6 +1,6 @@
 ## 🛡️ Cryptographic Bill of Materials (CBOM) & PQC Migration Assessment
 
-**Format**: CycloneDX (v1.7) | **First-Party Code Crypto Assets**: 1 | **Total Tracked Crypto Assets**: 1
+**Format**: CycloneDX (v1.6) | **First-Party Code Crypto Assets**: 1 | **Total Tracked Crypto Assets**: 1
 
 ### 📊 Post-Quantum Migration Scorecard
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | **Post-Quantum Ready (PQC)** | **0** | 🟢 Quantum-Resistant (NIST FIPS 203/204/205) |
 | **Quantum-Vulnerable (Backlog)** | **1** | 🔴 At Risk of 'Harvest Now, Decrypt Later' |
-| **Classical Symmetric / Hashing** | **0** | 🟡 Classical Security (Requires AES-256 / SHA-256+) |
+| **Classical Symmetric / Digest** | **0** | 🟡 Classical Security (Requires AES-256 / SHA-256+) |
 | **Asymmetric PQC Migration Progress** | **0.0%** | (0 of 1 asymmetric primitives migrated) |
 
 ### 🎯 Cryptographic Supply Chain Coverage & Confidence
@@ -16,10 +16,12 @@
 | Evaluation Layer | Coverage / Status | Audit Confidence Assessment |
 |---|---|---|
 | **First-Party Code (`src/`)** | **100% Audited** (0 Custom Primitives) | 🟢 **HIGH** (Direct AST & SAST verified clean) |
-| **Third-Party Supply Chain** | **0.0%** (0 of 2 dependencies cataloged) | 🔴 LOW (Known profiles assimilated) |
-| **Overall Audit Confidence Score** | **33.3%** | **🔴 LOW** (2 unassimilated supply chain dependencies) |
+| **Third-Party Supply Chain** | **0.0%** (0 of 16 dependencies cataloged) | 🔴 LOW (Known profiles assimilated) |
+| **Overall Audit Confidence Score** | **5.9%** | 🔴 LOW (16 unassimilated supply chain dependencies) |
 
-### ✅ Post-Quantum Cryptography Migrated Assets
+| **System OS Inventory** | **Pending Update** | 🟡 **Warning** (Local OS crypto components not yet inventoried) |
+
+### ✅ Post-Quantum Ready Assets
 
 > ⚠️ **No Post-Quantum Ready assets detected.** Immediate migration planning recommended for asymmetric key exchanges and digital signatures.
 
@@ -31,11 +33,27 @@
 
 ### 🔒 Classical Symmetric & Digest Assets
 
+> ℹ️ **No classical symmetric assets detected.**
+
 ### ⚠️ Unassimilated Third-Party Binaries & Cryptographic Blind Spots
 
 > ℹ️ *The following third-party dependencies do not have verified upstream CBOM attestations in the catalog. They lower the audit confidence score until explicit CBOMs or attestations are published.* 
 
 | Dependency Name | Version | Package URL (purl) | Status |
 |---|---|---|---|
-| `ekm-demo` | N/A | `N/A` | 🟡 Unassimilated (No upstream CBOM) |
-| `ekm-demo` | latest | `pkg:container/ekm-demo@latest` | 🟡 Unassimilated (No upstream CBOM) |
+| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
+| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
+| `actions/checkout` | v7.0.1 | `pkg:github/actions/checkout@v7.0.1` | 🟡 Unassimilated (No upstream CBOM) |
+| `actions/setup-python` | v5.6.0 | `pkg:github/actions/setup-python@v5.6.0` | 🟡 Unassimilated (No upstream CBOM) |
+| `actions/upload-artifact` | v4.6.2 | `pkg:github/actions/upload-artifact@v4.6.2` | 🟡 Unassimilated (No upstream CBOM) |
+| `anchore/sbom-action` | v0.24.2 | `pkg:github/anchore/sbom-action@v0.24.2` | 🟡 Unassimilated (No upstream CBOM) |
+| `aquasecurity/trivy-action` | v0.36.0 | `pkg:github/aquasecurity/trivy-action@v0.36.0` | 🟡 Unassimilated (No upstream CBOM) |
+| `cbomkit/cbomkit-action` | v2.3.0 | `pkg:github/cbomkit/cbomkit-action@v2.3.0` | 🟡 Unassimilated (No upstream CBOM) |
+| `docker/build-push-action` | v7.4.0 | `pkg:github/docker/build-push-action@v7.4.0` | 🟡 Unassimilated (No upstream CBOM) |
+| `docker/setup-buildx-action` | v4.4.1 | `pkg:github/docker/setup-buildx-action@v4.4.1` | 🟡 Unassimilated (No upstream CBOM) |
+| `gitleaks/gitleaks-action` | v3.0.0 | `pkg:github/gitleaks/gitleaks-action@v3.0.0` | 🟡 Unassimilated (No upstream CBOM) |
+| `returntocorp/semgrep-action` | 713efdd345f3035192eaa63f56867b88e63e4e5d | `pkg:github/returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d` | 🟡 Unassimilated (No upstream CBOM) |
+| `wagoid/commitlint-github-action` | v6.2.1 | `pkg:github/wagoid/commitlint-github-action@v6.2.1` | 🟡 Unassimilated (No upstream CBOM) |
+| `/home/runner/work/ekm-demo/ekm-demo/.github/workflows/commit-lint.yml` | N/A | `N/A` | 🟡 Unassimilated (No upstream CBOM) |
+| `/home/runner/work/ekm-demo/ekm-demo/.github/workflows/sbom-cbom.yml` | N/A | `N/A` | 🟡 Unassimilated (No upstream CBOM) |
+| *... and 1 more unassimilated dependencies* | | | |

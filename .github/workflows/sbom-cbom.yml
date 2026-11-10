@@ -31,19 +31,33 @@ jobs:
       - name: Create output directory
         run: mkdir -p oss
 
+      - name: Set up Python for Cryptographic Auditing & Dependency Resolution
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
       # -------------------------------------------------------------
       # 1. Generate SBOM (CycloneDX and SPDX via Anchore / Syft)
       # -------------------------------------------------------------
       - name: Generate CycloneDX SBOM (Anchore / Syft)
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
         with:
           path: .
           format: cyclonedx-json
           output-file: oss/sbom.cyclonedx.json
           upload-artifact: false
 
+      - name: Enrich SBOM with Python Dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            python3 -m pip install --quiet -r requirements.txt || true
+          fi
+          if [ -f scripts/enrich_sbom_python.py ]; then
+            python3 scripts/enrich_sbom_python.py oss/sbom.cyclonedx.json .
+          fi
+
       - name: Generate SPDX SBOM (Anchore / Syft)
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
         with:
           path: .
           format: spdx-json
@@ -59,7 +73,7 @@ jobs:
         continue-on-error: true
         env:
           CBOMKIT_OUTPUT_DIR: oss
-          CBOMKIT_EXCLUDE: "(^|/)scripts/.*|(^|/)tests/.*"
+          CBOMKIT_EXCLUDE: "(^|/)scripts/(scan_crypto_ast|analyze_cbom|fetch_oci_cbom|update_os_inventory|enrich_sbom).*|(^|/)tests/.*"
 
       - name: Fix permissions for container-generated artifacts
         run: sudo chown -R $(id -u):$(id -g) oss/ || true
@@ -67,11 +81,6 @@ jobs:
       # -------------------------------------------------------------
       # 3. Dual-Engine Semantic AST Crypto Discovery & Reconciliation
       # -------------------------------------------------------------
-      - name: Set up Python for Cryptographic Auditing
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.11'
-
       - name: Semantic AST Cryptographic Scan & CBOM Reconciliation
         run: |
           if [ -f scripts/scan_crypto_ast.py ]; then
@@ -137,7 +146,7 @@ jobs:
       # 7. Upload All BOM Artifacts
       # -------------------------------------------------------------
       - name: Upload BOM Artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bom-artifacts
           path: oss/

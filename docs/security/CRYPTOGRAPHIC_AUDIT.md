@@ -1,6 +1,6 @@
 ## 🛡️ Cryptographic Bill of Materials (CBOM) & PQC Migration Assessment
 
-**Format**: CycloneDX (v1.7) | **First-Party Code Crypto Assets**: 1 | **Total Tracked Crypto Assets**: 1
+**Format**: CycloneDX (v1.6) | **First-Party Code Crypto Assets**: 1 | **Total Tracked Crypto Assets**: 1
 
 ### 📊 Post-Quantum Migration Scorecard
 
@@ -16,8 +16,8 @@
 | Evaluation Layer | Coverage / Status | Audit Confidence Assessment |
 |---|---|---|
 | **First-Party Code (`src/`, `scripts/`)** | **100% Audited** (1 Crypto Primitive(s) Inventoried) | 🟢 **HIGH** (Direct AST & SAST verified) |
-| **Third-Party Supply Chain** | **0.0%** (0 of 2 dependencies cataloged) | 🔴 LOW (Known profiles assimilated) |
-| **Overall Audit Confidence Score** | **33.3%** | 🔴 LOW (2 unassimilated supply chain dependencies) |
+| **Third-Party Supply Chain** | **100.0%** (13 of 13 dependencies cataloged) | 🟢 HIGH (Known profiles assimilated) |
+| **Overall Audit Confidence Score** | **100.0%** | 🟢 HIGH (0 unassimilated supply chain dependencies) |
 
 | **System OS Inventory** | **Pending Update** | 🟡 **Warning** (Local OS crypto components not yet inventoried) |
 
@@ -34,12 +34,3 @@
 ### 🔒 Classical Symmetric & Digest Assets
 
 > ℹ️ **No classical symmetric assets detected.**
-
-### ⚠️ Unassimilated Third-Party Binaries & Cryptographic Blind Spots
-
-> ℹ️ *The following third-party dependencies do not have verified upstream CBOM attestations in the catalog. They lower the audit confidence score until explicit CBOMs or attestations are published.* 
-
-| Dependency Name | Version | Package URL (purl) | Status |
-|---|---|---|---|
-| `ekm-demo` | N/A | `N/A` | 🟡 Unassimilated (No upstream CBOM) |
-| `ekm-demo` | latest | `pkg:container/ekm-demo@latest` | 🟡 Unassimilated (No upstream CBOM) |
